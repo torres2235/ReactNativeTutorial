@@ -7,16 +7,67 @@ import {
   FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useState, useContext, useEffect } from "react";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { Inter_500Medium, useFonts } from "@expo-google-fonts/inter";
+import Animated, { LinearTransition } from "react-native-reanimated";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { StatusBar } from "expo-status-bar";
+import Octicons from "@expo/vector-icons/Octicons";
 
 import { data } from "@/data/todos";
+import { ThemeContext } from "@/context/ThemeContext";
 
 export default function Index() {
-  const [todos, setTodos] = useState(data.sort((a, b) => b.id - a.id));
+  const [todos, setTodos] = useState([]);
   const [text, setText] = useState("");
+  const { colorScheme, setColorScheme, theme } = useContext(ThemeContext);
+  const [loaded, error] = useFonts({
+    Inter_500Medium,
+  });
+
+  useEffect(() => {
+    // if we have user saved data, use that instead of our default data
+    const fetchData = async () => {
+      try {
+        const jsonValue = await AsyncStorage.getItem("TodoApp");
+        const storageTodos = jsonValue != null ? JSON.parse(jsonValue) : null;
+
+        if (storageTodos && storageTodos.length) {
+          setTodos(storageTodos.sort((a, b) => b.id - a.id));
+        } else {
+          setTodos(data.sort((a, b) => b.id - a.id));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    fetchData();
+  }, [data]);
+
+  useEffect(() => {
+    // store any new todos locally
+    const storeData = async () => {
+      try {
+        const jsonValue = JSON.stringify(todos);
+        await AsyncStorage.setItem("TodoApp", jsonValue);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    storeData();
+  }, [todos]);
+
+  if (!loaded && !error) {
+    return null;
+  }
+
+  const styles = creatStyles(theme, colorScheme);
 
   const addTodo = () => {
+    // create
     if (text.trim()) {
       const newId = todos.length > 0 ? todos[0].id + 1 : 1;
       setTodos([{ id: newId, title: text, completed: false }, ...todos]);
@@ -25,6 +76,7 @@ export default function Index() {
   };
 
   const toggleTodo = (id) => {
+    // update
     setTodos(
       todos.map((todo) =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
@@ -33,10 +85,13 @@ export default function Index() {
   };
 
   const removeTodo = (id) => {
+    // delete
     setTodos(todos.filter((todo) => todo.id !== id));
   };
 
-  const renderItem = ({ item }) => (
+  const renderItem = (
+    { item } // read
+  ) => (
     <View style={styles.todoItem}>
       <Text
         style={[styles.todoText, item.completed && styles.completedText]}
@@ -68,73 +123,105 @@ export default function Index() {
         <Pressable onPress={addTodo} style={styles.addButton}>
           <Text styles={styles.addButtonText}>Add</Text>
         </Pressable>
+        <Pressable
+          onPress={() =>
+            setColorScheme(colorScheme === "light" ? "dark" : "light")
+          }
+          style={{ marginLeft: 10 }}
+        >
+          {colorScheme === "dark" ? (
+            <Octicons
+              name="moon"
+              size={36}
+              color={theme.text}
+              selectable={undefined}
+              style={{ width: 36 }}
+            />
+          ) : (
+            <Octicons
+              name="sun"
+              size={36}
+              color={theme.text}
+              selectable={undefined}
+              style={{ width: 36 }}
+            />
+          )}
+        </Pressable>
       </View>
 
-      <FlatList
+      <Animated.FlatList
         data={todos}
         renderItem={renderItem}
         keyExtractor={(todo) => todo.id}
         contentContainerStyle={{ flexGrow: 1 }}
+        itemLayoutAnimation={LinearTransition}
+        keyboardDismissMode="on-drag"
       />
+
+      <StatusBar stule={colorScheme === "dark" ? "light" : "light"} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    //width: '100%',
-    backgroundColor: "black",
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-    width: "100%",
-    maxWidth: 1024,
-    marginHorizontal: "auto",
-    pointerEvents: "auto",
-  },
-  input: {
-    flex: 1,
-    borderColor: "grey",
-    borderWidth: 1,
-    borderRadius: 5,
-    padding: 10,
-    marginRight: 10,
-    fontSize: 18,
-    minWidth: 0,
-    color: "white",
-  },
-  addButton: {
-    backgroundColor: "white",
-    borderRadius: 5,
-    padding: 10,
-  },
-  addButtonText: {
-    fontSize: 18,
-    color: "black",
-  },
-  todoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 4,
-    padding: 10,
-    borderBottomColor: "grey",
-    borderBottomWidth: 1,
-    width: "100%",
-    maxWidth: "1024",
-    marginHorizontal: "auto",
-    pointerEvents: "auto",
-  },
-  todoText: {
-    flex: 1,
-    fontSize: 18,
-    color: "white",
-  },
-  completedText: {
-    textDecorationLine: "line-through",
-    color: "grey",
-  },
-});
+function creatStyles(theme, colorScheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      //width: '100%',
+      backgroundColor: theme.background,
+    },
+    inputContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 10,
+      width: "100%",
+      maxWidth: 1024,
+      marginHorizontal: "auto",
+      pointerEvents: "auto",
+    },
+    input: {
+      flex: 1,
+      borderColor: "grey",
+      borderWidth: 1,
+      borderRadius: 5,
+      padding: 10,
+      marginRight: 10,
+      fontSize: 18,
+      fontFamily: Inter_500Medium,
+      minWidth: 0,
+      color: theme.text,
+    },
+    addButton: {
+      backgroundColor: theme.button,
+      borderRadius: 5,
+      padding: 10,
+    },
+    addButtonText: {
+      fontSize: 18,
+      color: colorScheme === "dark" ? "black" : "white",
+    },
+    todoItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 4,
+      padding: 10,
+      borderBottomColor: "grey",
+      borderBottomWidth: 1,
+      width: "100%",
+      maxWidth: "1024",
+      marginHorizontal: "auto",
+      pointerEvents: "auto",
+    },
+    todoText: {
+      flex: 1,
+      fontSize: 18,
+      fontFamily: Inter_500Medium,
+      color: theme.text,
+    },
+    completedText: {
+      textDecorationLine: "line-through",
+      color: "grey",
+    },
+  });
+}
